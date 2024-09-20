@@ -1,17 +1,16 @@
 import asyncio
 import lcd_screen, lcd_buttons, menus
-from bluetooth import UUID
 
-#Initialize Button handler
 buttons = lcd_buttons.ButtonHandler()
+menu_manager = menus.MenuManager()
+display = lcd_screen.LCD_1inch3()
 
 # async def handle_characteristic_update(data):
 #     # Handle incoming notifications or indications from connected peripheral devices
 #     print(f"\nUpdate received: {data}")
 
 async def run():
-    menu_manager = menus.MenuManager()
-    main_menu = menus.MainMenu(lcd_screen, menu_manager)
+    main_menu = menus.MainMenu(display, menu_manager)
     menu_manager.set_active_menu(main_menu)
 
     while True:

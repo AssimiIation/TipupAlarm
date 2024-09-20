@@ -1,11 +1,8 @@
-from machine import Pin,SPI,PWM
+from machine import Pin, SPI, PWM
 import framebuf
-import utime
-import os
-import math
-# ============ Start of Driver Code ================
-#  == Copy and paste into your code ==
-BL = 13  # Pins used for display screen
+
+# Pins used for display screen
+BL = 13  
 DC = 8
 RST = 12
 MOSI = 11
@@ -17,166 +14,38 @@ class LCD_1inch3(framebuf.FrameBuffer):
         self.width = 240
         self.height = 240
         
-        self.cs = Pin(CS,Pin.OUT)
-        self.rst = Pin(RST,Pin.OUT)
+        self.cs = Pin(CS, Pin.OUT)
+        self.rst = Pin(RST, Pin.OUT)
         
         self.cs(1)
-        self.spi = SPI(1)
-        self.spi = SPI(1,1000_000)
-        self.spi = SPI(1,100000_000,polarity=0, phase=0,sck=Pin(SCK),mosi=Pin(MOSI),miso=None)
-        self.dc = Pin(DC,Pin.OUT)
+        self.spi = SPI(1, 100000_000, polarity=0, phase=0, sck=Pin(SCK), mosi=Pin(MOSI), miso=None)
+        self.dc = Pin(DC, Pin.OUT)
         self.dc(1)
         self.buffer = bytearray(self.height * self.width * 2)
         super().__init__(self.buffer, self.width, self.height, framebuf.RGB565)
         self.init_display()
         
-        self.red   =   0x07E0 # Pre-defined colours
-        self.green =   0x001f # Probably easier to use colour(r,g,b) defined below
-        self.blue  =   0xf800
-        self.white =   0xffff
+        self.red = self.color(255, 0, 0)
+        self.green = self.color(0, 255, 0)
+        self.blue = self.color(0, 0, 255)
+        self.black = self.color(0, 0, 0)
+        self.white = self.color(255, 255, 255)
+        self.cyan = self.color(0, 255, 255)
+        self.yellow = self.color(255, 255, 0)
+
+        self.bg_color = self.black
+
+        # Cursor state
+        self.cursor_x = 0
+        self.cursor_y = 0
+        self.spacing = 8
         
-    def write_cmd(self, cmd):
-        self.cs(1)
-        self.dc(0)
-        self.cs(0)
-        self.spi.write(bytearray([cmd]))
-        self.cs(1)  
+        # Initialize PWM for backlight
+        self.pwm = PWM(Pin(BL))
+        self.pwm.freq(1000)
+        self.pwm.duty_u16(int(32768))  # Mid value
 
-    def write_data(self, buf):
-        self.cs(1)
-        self.dc(1)
-        self.cs(0)
-        self.spi.write(bytearray([buf]))
-        self.cs(1)
-
-    def init_display(self):
-        """Initialize display"""  
-        self.rst(1)
-        self.rst(0)
-        self.rst(1)
-        
-        self.write_cmd(0x36)
-        self.write_data(0x70)
-
-        self.write_cmd(0x3A) 
-        self.write_data(0x05)
-
-        self.write_cmd(0xB2)
-        self.write_data(0x0C)
-        self.write_data(0x0C)
-        self.write_data(0x00)
-        self.write_data(0x33)
-        self.write_data(0x33)
-
-        self.write_cmd(0xB7)
-        self.write_data(0x35) 
-
-        self.write_cmd(0xBB)
-        self.write_data(0x19)
-
-        self.write_cmd(0xC0)
-        self.write_data(0x2C)
-
-        self.write_cmd(0xC2)
-        self.write_data(0x01)
-
-        self.write_cmd(0xC3)
-        self.write_data(0x12)   
-
-        self.write_cmd(0xC4)
-        self.write_data(0x20)
-
-        self.write_cmd(0xC6)
-        self.write_data(0x0F) 
-
-        self.write_cmd(0xD0)
-        self.write_data(0xA4)
-        self.write_data(0xA1)
-
-        self.write_cmd(0xE0)
-        self.write_data(0xD0)
-        self.write_data(0x04)
-        self.write_data(0x0D)
-        self.write_data(0x11)
-        self.write_data(0x13)
-        self.write_data(0x2B)
-        self.write_data(0x3F)
-        self.write_data(0x54)
-        self.write_data(0x4C)
-        self.write_data(0x18)
-        self.write_data(0x0D)
-        self.write_data(0x0B)
-        self.write_data(0x1F)
-        self.write_data(0x23)
-
-        self.write_cmd(0xE1)
-        self.write_data(0xD0)
-        self.write_data(0x04)
-        self.write_data(0x0C)
-        self.write_data(0x11)
-        self.write_data(0x13)
-        self.write_data(0x2C)
-        self.write_data(0x3F)
-        self.write_data(0x44)
-        self.write_data(0x51)
-        self.write_data(0x2F)
-        self.write_data(0x1F)
-        self.write_data(0x1F)
-        self.write_data(0x20)
-        self.write_data(0x23)
-        
-        self.write_cmd(0x21)
-
-        self.write_cmd(0x11)
-
-        self.write_cmd(0x29)
-
-    def show(self):
-        self.write_cmd(0x2A)
-        self.write_data(0x00)
-        self.write_data(0x00)
-        self.write_data(0x00)
-        self.write_data(0xef)
-        
-        self.write_cmd(0x2B)
-        self.write_data(0x00)
-        self.write_data(0x00)
-        self.write_data(0x00)
-        self.write_data(0xEF)
-        
-        self.write_cmd(0x2C)
-        
-        self.cs(1)
-        self.dc(1)
-        self.cs(0)
-        self.spi.write(self.buffer)
-        self.cs(1)
-# ========= End of Driver ===========
-
-def colour(R,G,B):
-# Get RED value
-    rp = int(R*31/255) # range 0 to 31
-    if rp < 0: rp = 0
-    r = rp *8
-# Get Green value - more complicated!
-    gp = int(G*63/255) # range 0 - 63
-    if gp < 0: gp = 0
-    g = 0
-    if gp & 1:  g = g + 8192
-    if gp & 2:  g = g + 16384
-    if gp & 4:  g = g + 32768
-    if gp & 8:  g = g + 1
-    if gp & 16: g = g + 2
-    if gp & 32: g = g + 4
-# Get BLUE value       
-    bp =int(B*31/255) # range 0 - 31
-    if bp < 0: bp = 0
-    b = bp *256
-    colour = r+g+b
-    return colour
-    
-#ASCII Character Set
-cmap = ['00000000000000000000000000000000000', #Space
+        self.cmap = ['00000000000000000000000000000000000', #Space
         '00100001000010000100001000000000100', #!
         '01010010100000000000000000000000000', #"
         '01010010101101100000110110101001010', ##
@@ -271,106 +140,196 @@ cmap = ['00000000000000000000000000000000000', #Space
         '00100001000010000000001000010000100', #|
         '01000001000010000010001000010001000', #}
         '01000101010001000000000000000000000' #}~
-]
+        ]
 
-def printchar(letter,xpos,ypos,size,charupdate,c=colour(255, 255, 255)):
-    origin = xpos
-    charval = ord(letter)
-    #print(charval)
-    index = charval-32 #start code, 32 or space
-    #print(index)
-    character = cmap[index] #this is our char...
-    rows = [character[i:i+5] for i in range(0,len(character),5)]
-    #print(rows)
-    for row in rows:
-        #print(row)
-        for bit in row:
-            #print(bit)
-            if bit == '1':
-                LCD.pixel(xpos,ypos,c)
-                if size==2:
-                    LCD.pixel(xpos,ypos+1,c)
-                    LCD.pixel(xpos+1,ypos,c)
-                    LCD.pixel(xpos+1,ypos+1,c)
-                if size == 3:
-                    LCD.pixel(xpos+1,ypos+2,c)
-                    LCD.pixel(xpos+2,ypos+1,c)
-                    LCD.pixel(xpos+2,ypos+2,c)
-                    LCD.pixel(xpos,ypos+2,c)
-                    LCD.pixel(xpos,ypos+2,c)
-                    LCD.pixel(xpos,ypos+1,c)
-                    LCD.pixel(xpos+1,ypos,c)
-                    LCD.pixel(xpos+1,ypos+1,c)
-            xpos+=size
-        xpos=origin
-        ypos+=size
-    if charupdate == True:
-        LCD.show()
-    
-def delchar(xpos,ypos,size,delupdate):
-    if size == 1:
-        charwidth = 5
-        charheight = 9
-    if size == 2:
-        charwidth = 10
-        charheight = 18
-    if size == 3:
-        charwidth = 15
-        charheight = 27
-    c = colour(0,0,0) # Background colour
-    LCD.fill_rect(xpos,ypos,charwidth,charheight,c) #xywh
-    if delupdate == True:
-        LCD.show()
+    def write_cmd(self, cmd):
+        self.cs(1)
+        self.dc(0)
+        self.cs(0)
+        self.spi.write(bytearray([cmd]))
+        self.cs(1)  
 
-cursor_x = 0
-cursor_y = 0
-spacing = 8
+    def write_data(self, buf):
+        self.cs(1)
+        self.dc(1)
+        self.cs(0)
+        self.spi.write(bytearray([buf]))
+        self.cs(1)
 
-def move_cursor(x, y):
-    global cursor_x, cursor_y
-    cursor_x = x
-    cursor_y = y
+    def init_display(self):
+        """Initialize display"""  
+        self.rst(1)
+        self.rst(0)
+        self.rst(1)
+        
+        self.write_cmd(0x36)
+        self.write_data(0x70)
+        self.write_cmd(0x3A) 
+        self.write_data(0x05)
+        self.write_cmd(0xB2)
+        self.write_data(0x0C)
+        self.write_data(0x0C)
+        self.write_data(0x00)
+        self.write_data(0x33)
+        self.write_data(0x33)
+        self.write_cmd(0xB7)
+        self.write_data(0x35) 
+        self.write_cmd(0xBB)
+        self.write_data(0x19)
+        self.write_cmd(0xC0)
+        self.write_data(0x2C)
+        self.write_cmd(0xC2)
+        self.write_data(0x01)
+        self.write_cmd(0xC3)
+        self.write_data(0x12)   
+        self.write_cmd(0xC4)
+        self.write_data(0x20)
+        self.write_cmd(0xC6)
+        self.write_data(0x0F) 
+        self.write_cmd(0xD0)
+        self.write_data(0xA4)
+        self.write_data(0xA1)
+        self.write_cmd(0xE0)
+        self.write_data(0xD0)
+        self.write_data(0x04)
+        self.write_data(0x0D)
+        self.write_data(0x11)
+        self.write_data(0x13)
+        self.write_data(0x2B)
+        self.write_data(0x3F)
+        self.write_data(0x54)
+        self.write_data(0x4C)
+        self.write_data(0x18)
+        self.write_data(0x0D)
+        self.write_data(0x0B)
+        self.write_data(0x1F)
+        self.write_data(0x23)
+        self.write_cmd(0xE1)
+        self.write_data(0xD0)
+        self.write_data(0x04)
+        self.write_data(0x0C)
+        self.write_data(0x11)
+        self.write_data(0x13)
+        self.write_data(0x2C)
+        self.write_data(0x3F)
+        self.write_data(0x44)
+        self.write_data(0x51)
+        self.write_data(0x2F)
+        self.write_data(0x1F)
+        self.write_data(0x1F)
+        self.write_data(0x20)
+        self.write_data(0x23)
+        self.write_cmd(0x21)
+        self.write_cmd(0x11)
+        self.write_cmd(0x29)
 
-def printstring(string, size=2, clearscreen=False, charupdate=False, strupdate=True, newline=True, color=colour(255, 255, 255), printcursor=False):
-    global cursor_x, cursor_y, spacing
-    if size == 1:
-        spacing = 8
-    if size == 2:
-        spacing = 14
-    if size == 3:
-        spacing = 18
-    if clearscreen:
-        clear()
-    for i in string:
-        if printcursor:
-            print(f"{ i } at x: {cursor_x} y: {cursor_y}")
-        printchar(i,cursor_x, cursor_y,size,charupdate,color)
-        cursor_x+=spacing
-        if cursor_x > (LCD.width - spacing):
-            cursor_x = 0
-            cursor_y += spacing + int(spacing/2)
-    if strupdate == True:
-        LCD.show()
-    if newline:
-        cursor_x = 0
-        cursor_y += spacing + int(spacing/2)
-    
-def clear():
-    global cursor_x, cursor_y
-    LCD.fill(colour(0, 0, 0))
-    cursor_x = 0
-    cursor_y = 0
-    LCD.show()
-    
-pwm = PWM(Pin(BL)) # Screen Brightness
-pwm.freq(1000)
-pwm.duty_u16(int(32768)) # max 65535 - mid value
+    def show(self):
+        self.write_cmd(0x2A)
+        self.write_data(0x00)
+        self.write_data(0x00)
+        self.write_data(0x00)
+        self.write_data(0xef)
+        
+        self.write_cmd(0x2B)
+        self.write_data(0x00)
+        self.write_data(0x00)
+        self.write_data(0x00)
+        self.write_data(0xEF)
+        
+        self.write_cmd(0x2C)
+        
+        self.cs(1)
+        self.dc(1)
+        self.cs(0)
+        self.spi.write(self.buffer)
+        self.cs(1)
 
-LCD = LCD_1inch3()
-clear()
+    def color(self, R, G, B):
+        rp = int(R * 31 / 255)
+        rp = max(0, rp)
+        r = rp * 8
+        
+        gp = int(G * 63 / 255)
+        gp = max(0, gp)
+        g = 0
+        if gp & 1: g += 8192
+        if gp & 2: g += 16384
+        if gp & 4: g += 32768
+        if gp & 8: g += 1
+        if gp & 16: g += 2
+        if gp & 32: g += 4
+        
+        bp = int(B * 31 / 255)
+        bp = max(0, bp)
+        b = bp * 256
+        
+        return r + g + b
 
-red = colour(255, 0, 0)
-cyan = colour(0, 255, 255)
-white = colour(255, 255, 255)
-green = colour(0, 255, 0)
-yellow = colour(255, 255, 0)
+    def printchar(self, letter, xpos, ypos, size, charupdate, c=None):
+        if c is None:
+            c = self.white
+        origin = xpos
+        charval = ord(letter)
+        index = charval - 32  # start code, 32 or space
+        character = self.cmap[index]
+        rows = [character[i:i+5] for i in range(0, len(character), 5)]
+        
+        for row in rows:
+            for bit in row:
+                if bit == '1':
+                    self.pixel(xpos, ypos, c)
+                    if size == 2:
+                        self.pixel(xpos, ypos + 1, c)
+                        self.pixel(xpos + 1, ypos, c)
+                        self.pixel(xpos + 1, ypos + 1, c)
+                    if size == 3:
+                        self.pixel(xpos + 1, ypos + 2, c)
+                        self.pixel(xpos + 2, ypos + 1, c)
+                        self.pixel(xpos + 2, ypos + 2, c)
+                        self.pixel(xpos, ypos + 2, c)
+                        self.pixel(xpos, ypos + 1, c)
+                        self.pixel(xpos + 1, ypos, c)
+                xpos += size
+            xpos = origin
+            ypos += size
+        if charupdate:
+            self.show()
+
+    def delchar(self, xpos, ypos, size, delupdate):
+        charwidth = size * 5
+        charheight = size * 9
+        c = self.bg_color # Background colour
+        self.fill_rect(xpos, ypos, charwidth, charheight, c)  # xywh
+        if delupdate:
+            self.show()
+
+    def move_cursor(self, x, y):
+        self.cursor_x = x
+        self.cursor_y = y
+
+    def printstring(self, string, size=2, clearscreen=False, charupdate=False, strupdate=True, newline=True, color=None, printcursor=False):
+        if color is None:
+            color = self.white
+
+        spacing = {1: 8, 2: 14, 3: 18}.get(size, 8)
+        if clearscreen:
+            self.clear()
+        for i in string:
+            if printcursor:
+                print(f"{i} at x: {self.cursor_x} y: {self.cursor_y}")
+            self.printchar(i, self.cursor_x, self.cursor_y, size, charupdate, color)
+            self.cursor_x += spacing
+            if self.cursor_x > (self.width - spacing):
+                self.cursor_x = 0
+                self.cursor_y += spacing + int(spacing / 2)
+        if strupdate:
+            self.show()
+        if newline:
+            self.cursor_x = 0
+            self.cursor_y += spacing + int(spacing / 2)
+
+    def clear(self):
+        self.fill(self.bg_color)
+        self.cursor_x = 0
+        self.cursor_y = 0
+        self.show()
