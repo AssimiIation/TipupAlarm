@@ -5,10 +5,6 @@ buttons = lcd_buttons.ButtonHandler()
 menu_manager = menus.MenuManager()
 display = lcd_screen.LCD_1inch3()
 
-# async def handle_characteristic_update(data):
-#     # Handle incoming notifications or indications from connected peripheral devices
-#     print(f"\nUpdate received: {data}")
-
 async def run():
     main_menu = menus.MainMenu(display, menu_manager)
     menu_manager.set_active_menu(main_menu)

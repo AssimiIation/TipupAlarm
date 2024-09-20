@@ -70,9 +70,9 @@ class ScanMenu(BaseMenu):
             for x in spinner:
                 c = self.display.cyan
                 center = int(240/2) - 18
+                self.display.delchar(center, center, 3, True)
                 self.display.printchar(x, center, center, 3, True, c)
                 await asyncio.sleep(0.05)
-                self.display.delchar(center, center, 3, True)
 
     async def scan_task(self):
         # Start scanning
@@ -165,6 +165,27 @@ class TestConnectedMenu(BaseMenu):
         def address_from_bytes(self, bytes_object):
             return ':'.join(f'{byte:02X}' for byte in bytes_object)
         
+        def decode_characteristic_properties(self, properties):
+            descriptions = []
+            if properties & 0x01:  # Broadcast
+                descriptions.append("Broadcast")
+            if properties & 0x02:  # Read
+                descriptions.append("Read")
+            if properties & 0x04:  # Write Without Response
+                descriptions.append("Write Without Response")
+            if properties & 0x08:  # Write
+                descriptions.append("Write")
+            if properties & 0x10:  # Notify
+                descriptions.append("Notify")
+            if properties & 0x20:  # Indicate
+                descriptions.append("Indicate")
+            if properties & 0x40:  # Authenticate
+                descriptions.append("Authenticated")
+            if properties & 0x80:  # Extended Properties
+                descriptions.append("Extended Properties")
+
+            return ', '.join(descriptions)
+        
         async def set_io_characteristic(self, byte_value):
             await self.io_characteristic.write(bytearray([byte_value]))
 
@@ -178,14 +199,22 @@ class TestConnectedMenu(BaseMenu):
             except Exception as e:
                 print(f"Connection Error: {e}")
 
-            try:
-                io_service = await connection.service(self.io_service_uuid)
-                self.io_characteristic = await io_service.characteristic(self.io_characteristic_uuid)
-                print(f"Characteristic properties: {self.io_characteristic.properties}")
-                await self.io_characteristic.subscribe(indicate=True)
-                indication_task = asyncio.create_task(self.indication_handler(self.io_characteristic))
-            except Exception as e:
-                print(f"Error discovering services/characteristics: {e}")
+            #temporary debugging block below:
+            io_service = await connection.service(self.io_service_uuid)
+            self.io_characteristic = await io_service.characteristic(self.io_characteristic_uuid)
+            print(f"++ io_characteristic={self.io_characteristic}")
+            print(f"Characteristic properties: { self.decode_characteristic_properties(self.io_characteristic.properties) }")
+            await self.io_characteristic.subscribe(indicate=True)
+            indication_task = asyncio.create_task(self.indication_handler(self.io_characteristic))
+
+            # try:
+            #     io_service = await connection.service(self.io_service_uuid)
+            #     self.io_characteristic = await io_service.characteristic(self.io_characteristic_uuid)
+            #     print(f"Characteristic properties: { self.decode_characteristic_properties(self.io_characteristic.properties) }")
+            #     await self.io_characteristic.subscribe(indicate=True)
+            #     indication_task = asyncio.create_task(self.indication_handler(self.io_characteristic))
+            # except Exception as e:
+            #     print(f"Error discovering services/characteristics: {e}")
 
             led_value = await self.io_characteristic.read()
             if led_value == b'\x01':
@@ -193,7 +222,7 @@ class TestConnectedMenu(BaseMenu):
             else:
                 print(f"Current peripheral LED value: OFF")
 
-        async def indication_handler(characteristic):
+        async def indication_handler(self, characteristic):
             print("indication task started...")
             while True:
                 try:
