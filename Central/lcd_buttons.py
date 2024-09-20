@@ -29,7 +29,7 @@ class ButtonHandler:
 
         self.new_time = 0
         self.last_time = 0
-        self.debounce_limit = 200
+        self.debounce_limit = 300
 
     def wait_time_has_elapsed(self):
         self.new_time = utime.ticks_ms()

@@ -273,7 +273,7 @@ cmap = ['00000000000000000000000000000000000', #Space
         '01000101010001000000000000000000000' #}~
 ]
 
-def printchar(letter,xpos,ypos,size,charupdate,c):
+def printchar(letter,xpos,ypos,size,charupdate,c=colour(255, 255, 255)):
     origin = xpos
     charval = ord(letter)
     #print(charval)
@@ -326,7 +326,12 @@ cursor_x = 0
 cursor_y = 0
 spacing = 8
 
-def printstring(string, size=2, clearscreen=False, charupdate=False, strupdate=True, newline=True, color=colour(255, 255, 255)):
+def move_cursor(x, y):
+    global cursor_x, cursor_y
+    cursor_x = x
+    cursor_y = y
+
+def printstring(string, size=2, clearscreen=False, charupdate=False, strupdate=True, newline=True, color=colour(255, 255, 255), printcursor=False):
     global cursor_x, cursor_y, spacing
     if size == 1:
         spacing = 8
@@ -337,6 +342,8 @@ def printstring(string, size=2, clearscreen=False, charupdate=False, strupdate=T
     if clearscreen:
         clear()
     for i in string:
+        if printcursor:
+            print(f"{ i } at x: {cursor_x} y: {cursor_y}")
         printchar(i,cursor_x, cursor_y,size,charupdate,color)
         cursor_x+=spacing
         if cursor_x > (LCD.width - spacing):
@@ -366,3 +373,4 @@ red = colour(255, 0, 0)
 cyan = colour(0, 255, 255)
 white = colour(255, 255, 255)
 green = colour(0, 255, 0)
+yellow = colour(255, 255, 0)
