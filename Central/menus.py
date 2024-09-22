@@ -5,6 +5,16 @@ class MenuManager:
     def __init__(self):
         self.previous_menu = None
         self.active_menu = None
+
+        #Testing below
+        self.indication_buffer = []
+        aioble.core.register_irq_handler(self.ble_irq, None)
+
+    def ble_irq(self, event, data):
+        #_IRQ_GATTC_INDICATE
+        if event == 19:
+            conn_handle, val_handle, val = data
+            self.indication_buffer.append((conn_handle, val_handle, bytes(val)))
     
     def set_active_menu(self, menu):
         if self.active_menu != None:
@@ -205,7 +215,7 @@ class TestConnectedMenu(BaseMenu):
             print(f"++ io_characteristic={self.io_characteristic}")
             print(f"Characteristic properties: { self.decode_characteristic_properties(self.io_characteristic.properties) }")
             await self.io_characteristic.subscribe(indicate=True)
-            indication_task = asyncio.create_task(self.indication_handler(self.io_characteristic))
+            # indication_task = asyncio.create_task(self.indication_handler(self.io_characteristic))
 
             # try:
             #     io_service = await connection.service(self.io_service_uuid)
@@ -232,3 +242,12 @@ class TestConnectedMenu(BaseMenu):
                     print(f"Received indication: {indication_data}")
                 except asyncio.TimeoutError:
                     print("No indication received within the timeout period")
+
+class AlertMenu(BaseMenu):
+    def draw_menu(self):
+        self.display.clear()
+        self.display.printstring("  FISH ON!  ", size=3, color=self.display.cyan)
+        self.display.printstring("Press any button to clear", size=2)
+
+    def handle_input(self, input):
+        self.manager.set_active_menu(self.manager.previous_menu)
