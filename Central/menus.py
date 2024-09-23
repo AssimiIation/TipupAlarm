@@ -1,5 +1,6 @@
 import aioble, asyncio
 from bluetooth import UUID
+from tipup_device import TipupDevice
 
 class MenuManager:
     def __init__(self):
@@ -8,17 +9,28 @@ class MenuManager:
 
         #Testing below
         self.indication_buffer = []
+        self.connected_devices = {}
         aioble.core.register_irq_handler(self.ble_irq, None)
 
     def ble_irq(self, event, data):
+        #_IRQ_PERIPHERAL_CONNECT
+        if event == 7:
+            conn_handle, addr_type, addr = data
+            print(f"--IRQ CONNECT: handle={ conn_handle } addr_type={ addr_type } addr={ bytes(addr) } ")
+        #_IRQ_PERIPHERAL_DISCONNECT
+        elif event == 8:
+            conn_handle, addr_type, addr = data
+            pass
         #_IRQ_GATTC_INDICATE
-        if event == 19:
+        elif event == 19:
             conn_handle, val_handle, val = data
             self.indication_buffer.append((conn_handle, val_handle, bytes(val)))
     
     def set_active_menu(self, menu):
-        if self.active_menu != None:
+        #Only assigns current active_menu to previous_menu if it isn't None type, or the same type as the incoming menu
+        if self.active_menu is not None and not isinstance(self.active_menu, type(menu)):
             self.previous_menu = self.active_menu
+            print(f"Previous menu type: { type(self.previous_menu) }")
         self.active_menu = menu
         menu.draw_menu()
 
@@ -169,8 +181,7 @@ class TestConnectedMenu(BaseMenu):
                 loop.run_until_complete(self.set_io_characteristic(1))
             elif input == "B":
                 loop = asyncio.get_event_loop()
-                loop.run_until_complete(self.set_io_characteristic(0))
-                
+                loop.run_until_complete(self.set_io_characteristic(0))               
 
         def address_from_bytes(self, bytes_object):
             return ':'.join(f'{byte:02X}' for byte in bytes_object)
@@ -200,54 +211,47 @@ class TestConnectedMenu(BaseMenu):
             await self.io_characteristic.write(bytearray([byte_value]))
 
         async def connect_to_device(self, device):
-            try:
-                connection = await device.connect()
-                addr = self.address_from_bytes(device.addr)
-                print(f"Connected to { addr }")
-                self.display.printstring(f"Connected to", clearscreen=True, color=self.display.green)
-                self.display.printstring(f"{ addr }", color=self.display.green)
-            except Exception as e:
-                print(f"Connection Error: {e}")
-
-            #temporary debugging block below:
-            io_service = await connection.service(self.io_service_uuid)
-            self.io_characteristic = await io_service.characteristic(self.io_characteristic_uuid)
-            print(f"++ io_characteristic={self.io_characteristic}")
-            print(f"Characteristic properties: { self.decode_characteristic_properties(self.io_characteristic.properties) }")
-            await self.io_characteristic.subscribe(indicate=True)
-            # indication_task = asyncio.create_task(self.indication_handler(self.io_characteristic))
-
-            # try:
-            #     io_service = await connection.service(self.io_service_uuid)
-            #     self.io_characteristic = await io_service.characteristic(self.io_characteristic_uuid)
-            #     print(f"Characteristic properties: { self.decode_characteristic_properties(self.io_characteristic.properties) }")
-            #     await self.io_characteristic.subscribe(indicate=True)
-            #     indication_task = asyncio.create_task(self.indication_handler(self.io_characteristic))
-            # except Exception as e:
-            #     print(f"Error discovering services/characteristics: {e}")
-
-            led_value = await self.io_characteristic.read()
-            if led_value == b'\x01':
-                print(f"Current peripheral LED value: ON")
-            else:
-                print(f"Current peripheral LED value: OFF")
-
-        async def indication_handler(self, characteristic):
-            print("indication task started...")
-            while True:
+            addr = self.address_from_bytes(device.addr)
+            if addr not in self.manager.connected_devices:
                 try:
-                    print("Waiting for indication...")
-                    indication_data = await characteristic.indicated(timeout_ms=10000)
-                    # Handle the indication data
-                    print(f"Received indication: {indication_data}")
-                except asyncio.TimeoutError:
-                    print("No indication received within the timeout period")
+                    #Connect to the selected device
+                    connection = await device.connect()
+                    new_device = TipupDevice(connection._conn_handle, self.device_name, addr)
+                except Exception as e:
+                    print(f"Connection Error: {e}")
+
+                try:
+                    #Discover services and subscribe to characteristics
+                    io_service = await connection.service(self.io_service_uuid)
+                    self.io_characteristic = await io_service.characteristic(self.io_characteristic_uuid)
+                    print(f"Characteristic properties: { self.decode_characteristic_properties(self.io_characteristic.properties) }")
+                    await self.io_characteristic.subscribe(indicate=True)
+                except Exception as e:
+                    print(f"Error discovering services/characteristics: {e}")
+
+                #Adds the new device to the connected devices list
+                self.manager.connected_devices[addr] = new_device
+
+                led_value = await self.io_characteristic.read()
+                if led_value == b'\x01':
+                    print(f"Current peripheral LED value: ON")
+                else:
+                    print(f"Current peripheral LED value: OFF")
+            
+            self.display.printstring(f"Connected to", clearscreen=True, color=self.display.green)
+            self.display.printstring(f"{ addr }", color=self.display.green)
 
 class AlertMenu(BaseMenu):
     def draw_menu(self):
         self.display.clear()
-        self.display.printstring("  FISH ON!  ", size=3, color=self.display.cyan)
-        self.display.printstring("Press any button to clear", size=2)
+        self.show_alert()
 
     def handle_input(self, input):
         self.manager.set_active_menu(self.manager.previous_menu)
+    
+    def show_alert(self):
+        self.display.printstring("      !", size=3, color=self.display.red)
+        self.display.move_cursor(0, int(240 * .75) - 18*2)
+        self.display.printstring("   FISH ON!  ", size=3, color=self.display.cyan)
+        self.display.printstring(" Press any button", size=2)
+        self.display.printstring("     to clear", size=2)
