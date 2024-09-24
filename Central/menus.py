@@ -26,41 +26,40 @@ class MenuManager:
             conn_handle, val_handle, val = data
             self.indication_buffer.append((conn_handle, val_handle, bytes(val)))
     
-    def set_active_menu(self, menu):
+    async def set_active_menu(self, menu):
         #Only assigns current active_menu to previous_menu if it isn't None type, or the same type as the incoming menu
         if self.active_menu is not None and not isinstance(self.active_menu, type(menu)):
             self.previous_menu = self.active_menu
-            print(f"Previous menu type: { type(self.previous_menu) }")
         self.active_menu = menu
-        menu.draw_menu()
+        await menu.draw_menu()
 
-    def button_pressed(self, button):
+    async def button_pressed(self, button):
         if self.active_menu:
-            result = self.active_menu.handle_input(button)
+            result = await self.active_menu.handle_input(button)
             if isinstance(result, BaseMenu):
-                self.set_active_menu(result)
+                await self.set_active_menu(result)
 
 class BaseMenu:
     def __init__(self, display, manager):
         self.display = display
         self.manager = manager
 
-    def draw_menu(self):
+    async def draw_menu(self):
         # Override this in derived classes
         raise NotImplementedError("Subclass needs to override draw_menu() method")
 
-    def handle_input(self, input):
+    async def handle_input(self, input):
         # Override for button input handling
         raise NotImplementedError("Subclass needs to override handle_input() method")
     
 class MainMenu(BaseMenu):
-    def draw_menu(self):
+    async def draw_menu(self):
         self.display.clear()
         self.display.move_cursor(0, int(240/2) - 9)
         self.display.printstring("   BlueNote", size=3, charupdate=True, color=self.display.cyan)
         self.display.printstring(" Press any button", size=2)
     
-    def handle_input(self, input):
+    async def handle_input(self, input):
         print(f"Button pressed: { input }")
         return ScanMenu(self.display, self.manager)
     
@@ -70,31 +69,36 @@ class ScanMenu(BaseMenu):
         self.manager = manager
         self.scanned_devices = {}
 
-    def draw_menu(self):
+    async def draw_menu(self):
         self.display.clear()
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(self.scan_for_devices())
-        self.manager.set_active_menu(DevicesMenu(self.display, self.manager, self.scanned_devices))
+        await self.scan_for_devices()
 
-    def handle_input(self, input):
+        await self.manager.set_active_menu(DevicesMenu(self.display, self.manager, self.scanned_devices))
+
+    async def handle_input(self, input):
         pass
 
     async def scan_for_devices(self):
         scan_task_obj = asyncio.create_task(self.scan_task())
-        spinner_task_obj = asyncio.create_task(self.spinner_task())
+        spinner_task_obj = asyncio.create_task(self.spinner_task(scan_task_obj))
 
         await scan_task_obj
-        spinner_task_obj.cancel()
+        await spinner_task_obj
     
-    async def spinner_task(self):
+    async def spinner_task(self, scan_task_obj):
         spinner = '-\\|/-\\|/'
-        while True:  # Keep the spinner running indefinitely
+        scan_ongoing = True
+        while scan_ongoing:  # Keep the spinner running indefinitely
             for x in spinner:
                 c = self.display.cyan
                 center = int(240/2) - 18
                 self.display.delchar(center, center, 3, True)
                 self.display.printchar(x, center, center, 3, True, c)
                 await asyncio.sleep(0.05)
+
+                if scan_task_obj.done():
+                    scan_ongoing = False   
+        print("Spinner task completed")                 
 
     async def scan_task(self):
         # Start scanning
@@ -107,6 +111,7 @@ class ScanMenu(BaseMenu):
                 print(f"Found device: {result.device.addr} (Name: {result.name()})")
                 if result.device.addr not in [d.addr for d in self.scanned_devices.values()] and result.name() != None:
                     self.scanned_devices[result.name()] = result.device
+        print("Scan task finished")
 
 class DevicesMenu(BaseMenu):
     def __init__(self, display, manager, device_list):
@@ -115,7 +120,7 @@ class DevicesMenu(BaseMenu):
         self.selected_device_index = 0
         self.no_devices = False
 
-    def draw_menu(self):
+    async def draw_menu(self):
         self.display.clear()
         if len(self.device_list) > 0:
             self.display.printstring("  Select Device", color=self.display.cyan)
@@ -134,7 +139,7 @@ class DevicesMenu(BaseMenu):
         self.display.printchar('>', 126, 21, 2, False)
         self.display.move_cursor(0, 39)
 
-    def handle_input(self, input):
+    async def handle_input(self, input):
         # TODO - add logic to start a new scan if no devices are found, make buttons change selction index
         if self.no_devices:
             self.manager.set_active_menu(ScanMenu(self.display, self.manager))
@@ -170,12 +175,11 @@ class TestConnectedMenu(BaseMenu):
             self.io_characteristic_uuid = UUID('1a0e5013-fbd8-4ca7-b38d-683e25c9eb97')
             self.io_characteristic = None
         
-        def draw_menu(self):
+        async def draw_menu(self):
             self.display.clear()
-            loop = asyncio.get_event_loop()
-            loop.run_until_complete(self.connect_to_device(self.device))
+            await self.connect_to_device(self.device)
 
-        def handle_input(self, input):
+        async def handle_input(self, input):
             if input == "A":
                 loop = asyncio.get_event_loop()
                 loop.run_until_complete(self.set_io_characteristic(1))
@@ -242,12 +246,12 @@ class TestConnectedMenu(BaseMenu):
             self.display.printstring(f"{ addr }", color=self.display.green)
 
 class AlertMenu(BaseMenu):
-    def draw_menu(self):
+    async def draw_menu(self):
         self.display.clear()
         self.show_alert()
 
-    def handle_input(self, input):
-        self.manager.set_active_menu(self.manager.previous_menu)
+    async def handle_input(self, input):
+        await self.manager.set_active_menu(self.manager.previous_menu)
     
     def show_alert(self):
         self.display.printstring("      !", size=3, color=self.display.red)
