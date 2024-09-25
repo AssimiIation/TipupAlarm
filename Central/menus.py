@@ -30,6 +30,8 @@ class MenuManager:
         #Only assigns current active_menu to previous_menu if it isn't None type, or the same type as the incoming menu
         if self.active_menu is not None and not isinstance(self.active_menu, type(menu)):
             self.previous_menu = self.active_menu
+        if self.active_menu != None:
+            self.active_menu.exit()
         self.active_menu = menu
         await menu.draw_menu()
 
@@ -47,6 +49,10 @@ class BaseMenu:
     async def draw_menu(self):
         # Override this in derived classes
         raise NotImplementedError("Subclass needs to override draw_menu() method")
+    
+    def exit(self):
+        # Override this in derived classes
+        raise NotImplementedError("Subclass needs to override exit_menu() method")
 
     async def handle_input(self, input):
         # Override for button input handling
@@ -58,6 +64,9 @@ class MainMenu(BaseMenu):
         self.display.move_cursor(0, int(240/2) - 9)
         self.display.printstring("   BlueNote", size=3, charupdate=True, color=self.display.cyan)
         self.display.printstring(" Press any button", size=2)
+
+    def exit(self):
+        pass
     
     async def handle_input(self, input):
         print(f"Button pressed: { input }")
@@ -74,6 +83,9 @@ class ScanMenu(BaseMenu):
         await self.scan_for_devices()
 
         await self.manager.set_active_menu(DevicesMenu(self.display, self.manager, self.scanned_devices))
+
+    def exit(self):
+        pass
 
     async def handle_input(self, input):
         pass
@@ -132,6 +144,9 @@ class DevicesMenu(BaseMenu):
             self.display.printstring("Press any button to scan again", size=2)
             self.no_devices = True
 
+    def exit(self):
+        pass
+
     def draw_selection(self, index):
         self.display.delchar(98, 21, 2, False)
         self.display.printchar('<', 70, 21, 2, False)
@@ -178,6 +193,9 @@ class TestConnectedMenu(BaseMenu):
         async def draw_menu(self):
             self.display.clear()
             await self.connect_to_device(self.device)
+
+        def exit(self):
+            pass
 
         async def handle_input(self, input):
             if input == "A":
@@ -246,13 +264,18 @@ class TestConnectedMenu(BaseMenu):
 class AlertMenu(BaseMenu):
     def __init__(self, display, manager):
         super().__init__(display, manager)
+        self.flashing_task = None
         self.flashing = True
         
     async def draw_menu(self):
         self.display.clear()
-        flash_background_task = asyncio.create_task(self.draw_background())
+        self.flashing_task = asyncio.create_task(self.draw_background())
         print("draw_menu() finished")
         # await flash_background_task
+
+    def exit(self):
+        if not self.flashing_task.done():
+            self.flashing_task.cancel()
 
     async def handle_input(self, input):
         self.flashing = False
