@@ -50,5 +50,6 @@ async def run():
                 await menu_manager.set_active_menu(menus.AlertMenu(display, menu_manager))
 
         await check_input()
+        await asyncio.sleep(0.01)
 
 asyncio.run(run())

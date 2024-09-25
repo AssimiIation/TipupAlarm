@@ -181,11 +181,9 @@ class TestConnectedMenu(BaseMenu):
 
         async def handle_input(self, input):
             if input == "A":
-                loop = asyncio.get_event_loop()
-                loop.run_until_complete(self.set_io_characteristic(1))
+                await self.set_io_characteristic(1)
             elif input == "B":
-                loop = asyncio.get_event_loop()
-                loop.run_until_complete(self.set_io_characteristic(0))               
+                await self.set_io_characteristic(0)             
 
         def address_from_bytes(self, bytes_object):
             return ':'.join(f'{byte:02X}' for byte in bytes_object)
@@ -246,16 +244,34 @@ class TestConnectedMenu(BaseMenu):
             self.display.printstring(f"{ addr }", color=self.display.green)
 
 class AlertMenu(BaseMenu):
+    def __init__(self, display, manager):
+        super().__init__(display, manager)
+        self.flashing = True
+        
     async def draw_menu(self):
         self.display.clear()
-        self.show_alert()
+        flash_background_task = asyncio.create_task(self.draw_background())
+        print("draw_menu() finished")
+        # await flash_background_task
 
     async def handle_input(self, input):
+        self.flashing = False
         await self.manager.set_active_menu(self.manager.previous_menu)
+
+    async def draw_background(self):
+        print("Drawing background")
+        bg_colors = [self.display.cyan, self.display.black]
+
+        while self.flashing:
+            self.display.fill_rect(0, 0, 240, 240, bg_colors[0])    #xywh
+            #Swap colors to imitate screen flashing
+            bg_colors[0], bg_colors[1] = bg_colors[1], bg_colors[0]
+            self.display.fill_rect(40, 92, 160, 100, self.display.black)
+            self.write_message()
+            await asyncio.sleep(.5)
+        print("Flashing task finished")
     
-    def show_alert(self):
-        self.display.printstring("      !", size=3, color=self.display.red)
-        self.display.move_cursor(0, int(240 * .75) - 18*2)
-        self.display.printstring("   FISH ON!  ", size=3, color=self.display.cyan)
-        self.display.printstring(" Press any button", size=2)
-        self.display.printstring("     to clear", size=2)
+    def write_message(self):
+        self.display.move_cursor(0, int(240 * .5) - 18)
+        self.display.printstring("   FISH ON!", size=3, strupdate=False, color=self.display.cyan)
+        self.display.printstring("    Press any          button          to clear")
