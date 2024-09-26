@@ -1,5 +1,8 @@
 from machine import Pin, SPI, PWM
-import framebuf
+import framebuf, gc
+
+#This is important to keep at the module level to prevent memory allocation errors caused by memory fragmentation
+screen_buffer = bytearray(240*240*2)
 
 # Pins used for display screen
 BL = 13  
@@ -21,13 +24,12 @@ class LCD_1inch3(framebuf.FrameBuffer):
         self.spi = SPI(1, 100000_000, polarity=0, phase=0, sck=Pin(SCK), mosi=Pin(MOSI), miso=None)
         self.dc = Pin(DC, Pin.OUT)
         self.dc(1)
-        self.buffer = bytearray(self.height * self.width * 2)
+        self.buffer = screen_buffer
         super().__init__(self.buffer, self.width, self.height, framebuf.RGB565)
         self.init_display()
         
         self.red = self.color(255, 0, 0)
         self.green = self.color(0, 255, 0)
-        self.blue = self.color(0, 0, 255)
         self.black = self.color(0, 0, 0)
         self.white = self.color(255, 255, 255)
         self.cyan = self.color(0, 255, 255)

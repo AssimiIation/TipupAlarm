@@ -1,4 +1,4 @@
-import aioble, asyncio
+import aioble, asyncio, gc
 from bluetooth import UUID
 from tipup_device import TipupDevice
 
@@ -34,6 +34,7 @@ class MenuManager:
             self.active_menu.exit()
         self.active_menu = menu
         await menu.draw_menu()
+        gc.collect()
 
     async def button_pressed(self, button):
         if self.active_menu:
@@ -47,7 +48,6 @@ class BaseMenu:
         self.manager = manager
 
     async def draw_menu(self):
-        # Override this in derived classes
         raise NotImplementedError("Subclass needs to override draw_menu() method")
     
     def exit(self):
@@ -58,7 +58,7 @@ class BaseMenu:
         # Override for button input handling
         raise NotImplementedError("Subclass needs to override handle_input() method")
     
-class MainMenu(BaseMenu):
+class SplashMenu(BaseMenu):
     async def draw_menu(self):
         self.display.clear()
         self.display.move_cursor(0, int(240/2) - 9)
@@ -71,6 +71,91 @@ class MainMenu(BaseMenu):
     async def handle_input(self, input):
         print(f"Button pressed: { input }")
         return ScanMenu(self.display, self.manager)
+    
+class MainMenu(BaseMenu):
+    def __init__(self, display, manager):
+        super().__init__(display, manager)
+        self.selected_option_index = 0
+
+    async def draw_menu(self):
+        self.display.clear()
+        self.display.printstring("   Main Menu", color=self.display.cyan)
+        self.draw_selection()
+        self.list_options()
+
+    def exit(self):
+        pass
+
+    async def handle_input(self, input):
+        if input == "LEFT":
+            self.selected_option_index -= 1
+            if self.selected_option_index < 0:
+                self.selected_option_index = 2
+            self.draw_selection()
+        elif input == "RIGHT":
+            self.selected_option_index += 1
+            if self.selected_option_index > 2:
+                self.selected_option_index = 0
+            self.draw_selection()
+        elif input == "SELECT":
+            if self.selected_option_index == 0:
+                return ScanMenu(self.display, self.manager)
+            elif self.selected_option_index == 1:
+                print("==[ Connected Devices ]==")
+                for device in self.manager.connected_devices.keys():
+                    print(device)
+
+
+    def list_options(self):
+        self.display.printstring("0: Scan for          Devices")
+        self.display.printstring("1: Connected         Devices")
+        self.display.printstring("2: Options")
+
+    def draw_selection(self):
+        self.display.delchar(98, 21, 2, False)
+        self.display.printchar('<', 70, 21, 2, False)
+        self.display.printchar(str(self.selected_option_index), 98, 21, 2, True, self.display.yellow)
+        self.display.printchar('>', 126, 21, 2, False)
+        self.display.move_cursor(0, 39)
+
+class ConnectedDevices(BaseMenu):
+    def __init__(self, display, manager):
+        super().__init__(display, manager)
+        self.selected_option_index = 0
+
+    async def draw_menu(self):
+        self.display.clear()
+        self.display.printstring(" Connected Devices", color=self.display.green)
+        self.draw_selection
+        self.list_devices()
+
+    def exit(self):
+        pass
+
+    async def handle_input(self, input):
+        if input == "LEFT":
+            self.selected_option_index -= 1
+            if self.selected_option_index < 0:
+                self.selected_option_index = 2
+            self.draw_selection()
+        elif input == "RIGHT":
+            self.selected_option_index += 1
+            if self.selected_option_index > 2:
+                self.selected_option_index = 0
+            self.draw_selection()
+        elif input == "SELECT":
+            pass
+
+    def draw_selection(self):
+        self.display.delchar(98, 21, 2, False)
+        self.display.printchar('<', 70, 21, 2, False)
+        self.display.printchar(str(self.selected_option_index), 98, 21, 2, True, self.display.yellow)
+        self.display.printchar('>', 126, 21, 2, False)
+        self.display.move_cursor(0, 39)
+
+    def list_devices(self):
+       for index, device in enumerate(self.manager.connected_devices.items()):
+            self.display.printstring(f"{ index }:{ device.name }")            
     
 class ScanMenu(BaseMenu):
     def __init__(self, display, manager):
@@ -136,7 +221,7 @@ class DevicesMenu(BaseMenu):
         self.display.clear()
         if len(self.device_list) > 0:
             self.display.printstring("  Select Device", color=self.display.cyan)
-            self.draw_selection(self.selected_device_index)
+            self.draw_selection()
             self.list_devices()
         else:
             self.display.printstring("  No Devices", size=3, color=self.display.red)
@@ -147,7 +232,7 @@ class DevicesMenu(BaseMenu):
     def exit(self):
         pass
 
-    def draw_selection(self, index):
+    def draw_selection(self):
         self.display.delchar(98, 21, 2, False)
         self.display.printchar('<', 70, 21, 2, False)
         self.display.printchar(str(self.selected_device_index), 98, 21, 2, True, self.display.yellow)
@@ -162,12 +247,12 @@ class DevicesMenu(BaseMenu):
             self.selected_device_index -= 1
             if self.selected_device_index < 0:
                 self.selected_device_index = len(self.device_list) - 1
-            self.draw_selection(self.selected_device_index)
+            self.draw_selection()
         elif input == "RIGHT":
             self.selected_device_index += 1
             if self.selected_device_index > len(self.device_list) - 1:
                 self.selected_device_index = 0
-            self.draw_selection(self.selected_device_index)
+            self.draw_selection()
         elif input == "SELECT":
             try:
                 selected_device = list(self.device_list.keys())[self.selected_device_index]
@@ -201,7 +286,9 @@ class TestConnectedMenu(BaseMenu):
             if input == "A":
                 await self.set_io_characteristic(1)
             elif input == "B":
-                await self.set_io_characteristic(0)             
+                await self.set_io_characteristic(0)
+            elif input == "Y":
+                return MainMenu(self.display, self.manager)      
 
         def address_from_bytes(self, bytes_object):
             return ':'.join(f'{byte:02X}' for byte in bytes_object)
@@ -233,12 +320,12 @@ class TestConnectedMenu(BaseMenu):
         async def connect_to_device(self, device):
             addr = self.address_from_bytes(device.addr)
             if addr not in self.manager.connected_devices:
-                try:
-                    #Connect to the selected device
-                    connection = await device.connect()
-                    new_device = TipupDevice(connection._conn_handle, self.device_name, addr)
-                except Exception as e:
-                    print(f"Connection Error: {e}")
+                # try:
+                #Connect to the selected device
+                connection = await device.connect()
+                new_device = TipupDevice(connection._conn_handle, self.device_name, addr)
+                # except Exception as e:
+                #     print(f"Connection Error: {e}")
 
                 try:
                     #Discover services and subscribe to characteristics
@@ -260,6 +347,8 @@ class TestConnectedMenu(BaseMenu):
             
             self.display.printstring(f"Connected to", clearscreen=True, color=self.display.green)
             self.display.printstring(f"{ addr }", color=self.display.green)
+
+
 
 class AlertMenu(BaseMenu):
     def __init__(self, display, manager):

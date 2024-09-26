@@ -1,9 +1,17 @@
-import asyncio
 import lcd_screen, lcd_buttons, menus
+import asyncio, gc
+
 
 buttons = lcd_buttons.ButtonHandler()
 menu_manager = menus.MenuManager()
 display = lcd_screen.LCD_1inch3()
+
+def gc_test():
+    free = gc.mem_free()
+    used = gc.mem_alloc()
+    print("Free memory:", free)
+    print("Allocated memory:", used)
+    print(f"Used { int(used/(free + used)*100) }% of total memory")
 
 async def check_input():
     if buttons.A_button_pressed:
@@ -14,6 +22,7 @@ async def check_input():
         buttons.B_button_pressed = False
     elif buttons.X_button_pressed:
         await menu_manager.button_pressed("X")
+        gc_test()
         buttons.X_button_pressed = False
     elif buttons.Y_button_pressed:
         await menu_manager.button_pressed("Y")
